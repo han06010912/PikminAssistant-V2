@@ -207,6 +207,12 @@ Runnable feedAction = new Runnable() {
 
     void close(){
         running=false;
+        void close(){
+    running=false;
+    paused=false;
+    feedHandler.removeCallbacks(feedAction);
+    stopSelf();
+}
         paused=false;
         stopSelf();
     }
