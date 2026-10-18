@@ -111,17 +111,36 @@ public class FloatingService extends Service {
         wm.addView(window,p);
     }
 
-    void start(){
-        running=true;
-        paused=false;
-        msg("自動操作尚未連接，請勿視為已執行");
+   void start(){
+    PikminAccessibilityService service =
+        PikminAccessibilityService.instance;
+
+    if(service == null){
+        running = false;
+        paused = false;
+        msg("無障礙服務尚未連接");
+        return;
     }
 
+    running = true;
+    paused = false;
+    msg("無障礙服務已連接，等待執行動作");
+}
+
     void pause(){
-        if(!running)return;
-        paused=!paused;
-        msg(paused?"已暫停":"已繼續");
+    if(!running){
+        msg("目前沒有執行中的任務");
+        return;
     }
+
+    paused = !paused;
+
+    if(paused){
+        msg("已暫停");
+    }else{
+        msg("已繼續");
+    }
+}
 
     void close(){
         running=false;
