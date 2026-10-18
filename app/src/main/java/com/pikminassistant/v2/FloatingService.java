@@ -159,22 +159,37 @@ Runnable feedAction = new Runnable() {
         }
     }
 };
-   void start(){
-    PikminAccessibilityService service =
-        PikminAccessibilityService.instance;
-
-    if(service == null){
-        running = false;
-        paused = false;
-        msg("無障礙服務尚未連接");
+  void start() {
+    if (PikminAccessibilityService.instance == null) {
+        msg("請先開啟無障礙服務");
         return;
     }
 
+    if (!task.equals("feed")) {
+        msg("目前先支援自動餵食");
+        return;
+    }
+
+    feedHandler.removeCallbacks(feedAction);
+
+    feedCount = 0;
+    feedLimit = prefs.getInt("rounds", 5);
+    feedInterval =
+        prefs.getInt("seconds", 10) * 1000L;
+
+    if (feedLimit < 1) feedLimit = 1;
+    if (feedInterval < 1000)
+        feedInterval = 1000;
+
     running = true;
     paused = false;
-    msg("無障礙服務已連接，等待執行動作");
-}
 
+    mode = 0;
+    show();
+
+    feedHandler.postDelayed(feedAction, 800);
+    msg("開始自動餵食");
+}
     void pause(){
     if(!running){
         msg("目前沒有執行中的任務");
