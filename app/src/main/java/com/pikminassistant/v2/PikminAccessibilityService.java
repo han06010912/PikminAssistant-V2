@@ -43,7 +43,24 @@ public class PikminAccessibilityService
 
         dispatchGesture(gesture, null, null);
     }
+public void drag(
+        float x1, float y1,
+        float x2, float y2,
+        long duration) {
 
+    Path path = new Path();
+    path.moveTo(x1, y1);
+    path.lineTo(x2, y2);
+
+    GestureDescription gesture =
+        new GestureDescription.Builder()
+            .addStroke(
+                new GestureDescription.StrokeDescription(
+                    path, 0, duration))
+            .build();
+
+    dispatchGesture(gesture, null, null);
+}
     @Override
     public void onDestroy() {
         instance = null;
