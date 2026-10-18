@@ -285,9 +285,10 @@ Runnable feedAction = new Runnable() {
         TextView stop=btn("■ 停止執行");
         body.addView(stop);
         stop.setOnClickListener(v->{
-            running=false;
-            paused=false;
-            msg("已停止");
+            running = false;
+paused = false;
+feedHandler.removeCallbacks(feedAction);
+msg("已停止");
         });
     }
 
