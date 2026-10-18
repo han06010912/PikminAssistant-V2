@@ -1,345 +1,240 @@
 package com.pikminassistant.v2;
 
-import android.app.Service;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.graphics.Color;
-import android.graphics.PixelFormat;
-import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
-import android.os.IBinder;
+import android.app.*;
+import android.content.*;
+import android.graphics.*;
+import android.graphics.drawable.*;
+import android.os.*;
 import android.provider.Settings;
-import android.util.TypedValue;
-import android.view.Gravity;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.ViewConfiguration;
-import android.view.WindowManager;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.TextView;
-import android.widget.EditText;
-import android.widget.CheckBox;
-import android.widget.Spinner;
-import android.widget.ArrayAdapter;
-import android.widget.Toast;
-import android.text.InputType;
+import android.view.*;
+import android.widget.*;
 
 public class FloatingService extends Service {
+    WindowManager wm;
+    WindowManager.LayoutParams p;
+    View window;
+    LinearLayout root, fields;
+    SharedPreferences prefs;
+    int dark = 0xff245c45, mint = 0xffe6f3e8;
+    int mode = 0;
+    String task = "feed";
 
-    private WindowManager manager;
-    private WindowManager.LayoutParams params;
-    private View floatingView;
-    private SharedPreferences prefs;
+    int dp(int n) {
+        return (int)(n * getResources()
+            .getDisplayMetrics().density);
+    }
 
-    private final int DARK = Color.rgb(36, 92, 69);
-    private final int MINT = Color.rgb(230, 243, 232);
-    private final int PALE = Color.rgb(248, 252, 247);
+    GradientDrawable bg(int color) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(dp(18));
+        return d;
+    }
 
-    private boolean expanded = false;
-    private boolean panelOpen = false;
-    private boolean running = false;
-    private boolean paused = false;
-
-    private String selectedTask = "feed";
-    private int startX, startY;
-    private float downX, downY;
-    private boolean dragging;
-
-    private LinearLayout settingsArea;
+    TextView btn(String label) {
+        TextView v = new TextView(this);
+        v.setText(label);
+        v.setTextSize(16);
+        v.setTextColor(-1);
+        v.setGravity(17);
+        v.setPadding(dp(12),dp(12),dp(12),dp(12));
+        v.setBackground(bg(dark));
+        return v;
+    }
 
     @Override
     public void onCreate() {
         super.onCreate();
-        manager = (WindowManager)
-            getSystemService(WINDOW_SERVICE);
-        prefs = getSharedPreferences(
-            "floating", MODE_PRIVATE);
-        selectedTask = prefs.getString("task", "feed");
+        wm = (WindowManager)getSystemService(WINDOW_SERVICE);
+        prefs = getSharedPreferences("floating",0);
     }
 
     @Override
-    public int onStartCommand(
-        Intent intent, int flags, int startId) {
-
+    public int onStartCommand(Intent i,int f,int id) {
         if (!Settings.canDrawOverlays(this)) {
             stopSelf();
             return START_NOT_STICKY;
         }
-
-        if (intent != null &&
-            intent.hasExtra("expanded")) {
-            expanded = intent.getBooleanExtra(
-                "expanded", false);
-            panelOpen = false;
-        }
-
-        showWindow();
+        mode = i != null && i.getBooleanExtra(
+            "expanded",false) ? 1 : 0;
+        show();
         return START_NOT_STICKY;
     }
 
-    private int dp(float value) {
-        return (int) TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            value,
-            getResources().getDisplayMetrics());
-    }
+    void show() {
+        if (window != null) wm.removeView(window);
+        root = new LinearLayout(this);
+        root.setOrientation(1);
+        root.setBackground(bg(mint));
 
-    private GradientDrawable bg(int color, int radius) {
-        GradientDrawable d = new GradientDrawable();
-        d.setColor(color);
-        d.setCornerRadius(dp(radius));
-        return d;
-    }
+        p = new WindowManager.LayoutParams(
+            -2,-2,2038,8,-3);
+        p.gravity = Gravity.TOP | Gravity.LEFT;
+        p.x = prefs.getInt("x",30);
+        p.y = prefs.getInt("y",200);
 
-    private TextView text(
-        String value, int size, int color) {
-
-        TextView t = new TextView(this);
-        t.setText(value);
-        t.setTextSize(size);
-        t.setTextColor(color);
-        t.setGravity(Gravity.CENTER_VERTICAL);
-        return t;
-    }
-
-    private TextView action(
-        String value, int color, int textColor) {
-
-        TextView t = text(value, 16, textColor);
-        t.setGravity(Gravity.CENTER);
-        t.setBackground(bg(color, 14));
-        t.setPadding(dp(12), dp(13),
-            dp(12), dp(13));
-        return t;
-    }
-
-    private void addSpace(LinearLayout parent, int height) {
-        View v = new View(this);
-        parent.addView(v, new LinearLayout.LayoutParams(
-            1, dp(height)));
-    }
-
-    private EditText number(
-        LinearLayout parent,
-        String label,
-        String key,
-        int defaultValue) {
-
-        parent.addView(text(label, 15, DARK));
-
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setTextSize(16);
-        input.setInputType(
-            InputType.TYPE_CLASS_NUMBER);
-        input.setText(String.valueOf(
-            prefs.getInt(key, defaultValue)));
-        input.setSelectAllOnFocus(true);
-
-        parent.addView(input);
-
-        input.setOnFocusChangeListener((v, focus) -> {
-            if (!focus) saveNumber(input, key);
-        });
-
-        return input;
-    }
-
-    private void saveNumber(EditText input, String key) {
-        try {
-            int value = Integer.parseInt(
-                input.getText().toString().trim());
-            if (value < 0) throw new Exception();
-
-            prefs.edit().putInt(key, value).apply();
-        } catch (Exception e) {
-            Toast.makeText(this,
-                "請輸入有效數字",
-                Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void showWindow() {
-        removeWindow();
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackground(bg(MINT, 22));
-        root.setElevation(dp(8));
-
-        if (panelOpen) {
-            buildPanel(root);
-        } else if (expanded) {
-            buildBar(root);
+        if (mode == 0) {
+            TextView b = btn("🌱");
+            root.addView(b);
+            drag(b,() -> {mode=2;show();});
+        } else if (mode == 1) {
+            LinearLayout bar = new LinearLayout(this);
+            root.addView(bar);
+            for (String s : new String[]{"☰","⚙","▶","Ⅱ","■"}) {
+                TextView b = btn(s);
+                bar.addView(b);
+                if (s.equals("☰"))
+                    drag(b,()->{mode=0;show();});
+                else if (s.equals("⚙"))
+                    b.setOnClickListener(v->{mode=2;show();});
+                else if (s.equals("■"))
+                    b.setOnClickListener(v->stopSelf());
+                else
+                    b.setOnClickListener(v->Toast.makeText(
+                        this,"自動操作尚未啟用",0).show());
+            }
         } else {
-            buildBubble(root);
+            panel();
         }
-
-        int type = Build.VERSION.SDK_INT >= 26
-            ? WindowManager.LayoutParams
-                .TYPE_APPLICATION_OVERLAY
-            : WindowManager.LayoutParams.TYPE_PHONE;
-
-        params = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT);
-
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.x = prefs.getInt("x", dp(30));
-        params.y = prefs.getInt("y", dp(200));
-
-        if (panelOpen) {
-            params.width = Math.min(
-                dp(350),
-                getResources().getDisplayMetrics()
-                    .widthPixels - dp(24));
-            params.height = Math.min(
-                dp(620),
-                getResources().getDisplayMetrics()
-                    .heightPixels - dp(100));
-            params.flags =
-                WindowManager.LayoutParams
-                    .FLAG_NOT_TOUCH_MODAL;
-            params.softInputMode =
-                WindowManager.LayoutParams
-                    .SOFT_INPUT_ADJUST_RESIZE;
-        }
-
-        floatingView = root;
-        manager.addView(floatingView, params);
+        window = root;
+        wm.addView(window,p);
     }
+    void panel() {
+        p.width = Math.min(dp(350),
+            getResources().getDisplayMetrics().widthPixels-dp(24));
+        p.height = Math.min(dp(600),
+            getResources().getDisplayMetrics().heightPixels-dp(100));
+        p.flags = 32;
 
-    private void buildBubble(LinearLayout root) {
-        TextView bubble = action(
-            "🌱", DARK, Color.WHITE);
-        bubble.setTextSize(25);
-        root.addView(bubble);
-
-        attachDrag(bubble, () -> {
-            panelOpen = true;
-            showWindow();
-        });
-    }
-
-    private void buildBar(LinearLayout root) {
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(5), dp(5), dp(5), dp(5));
-        root.addView(bar);
-
-        TextView move = action("☰", DARK, Color.WHITE);
-        TextView setup = action("⚙", DARK, Color.WHITE);
-        TextView play = action("▶", DARK, Color.WHITE);
-        TextView pause = action("Ⅱ", DARK, Color.WHITE);
-        TextView close = action("×", DARK, Color.WHITE);
-
-        bar.addView(move);
-        bar.addView(setup);
-        bar.addView(play);
-        bar.addView(pause);
-        bar.addView(close);
-
-        attachDrag(move, () -> {
-            expanded = false;
-            showWindow();
-        });
-
-        setup.setOnClickListener(v -> {
-            panelOpen = true;
-            showWindow();
-        });
-
-        play.setOnClickListener(v -> {
-            running = true;
-            paused = false;
-            Toast.makeText(this,
-                "控制狀態：執行中（尚未連接自動操作）",
-                Toast.LENGTH_SHORT).show();
-        });
-
-        pause.setOnClickListener(v -> {
-            paused = !paused;
-            Toast.makeText(this,
-                paused ? "已暫停" : "已繼續",
-                Toast.LENGTH_SHORT).show();
-        });
-
-        close.setOnClickListener(v -> stopSelf());
-    }
-
-    private void buildPanel(LinearLayout root) {
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(15), dp(12),
-            dp(12), dp(10));
-        root.addView(header);
-
-        TextView title = text(
-            "🌱 Pikmin 助手 V2", 19, DARK);
-        header.addView(title,
-            new LinearLayout.LayoutParams(
-                0, dp(48), 1));
-
-        TextView collapse = action(
-            "−", DARK, Color.WHITE);
-        header.addView(collapse);
-
-        attachDrag(title, () -> {});
-        collapse.setOnClickListener(v -> {
-            panelOpen = false;
-            showWindow();
-        });
+        LinearLayout head = new LinearLayout(this);
+        root.addView(head);
+        TextView title = btn("🌱 Pikmin 助手 V2");
+        head.addView(title,new LinearLayout.LayoutParams(0,dp(52),1));
+        drag(title,()->{});
+        TextView close = btn("−");
+        head.addView(close);
+        close.setOnClickListener(v->{mode=0;show();});
 
         ScrollView scroll = new ScrollView(this);
-        root.addView(scroll,
-            new LinearLayout.LayoutParams(
-                -1, 0, 1));
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(15), dp(5),
-            dp(15), dp(15));
-        scroll.addView(content);
+        root.addView(scroll);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(1);
+        body.setPadding(dp(12),dp(8),dp(12),dp(12));
+        scroll.addView(body);
 
         LinearLayout tabs = new LinearLayout(this);
-        tabs.setOrientation(LinearLayout.HORIZONTAL);
-        content.addView(tabs);
+        body.addView(tabs);
+        String[] names = {"收果","收盆","餵食"};
+        String[] keys = {"fruit","pot","feed"};
+        for(int n=0;n<3;n++){
+            final String k=keys[n];
+            TextView b=btn(names[n]);
+            tabs.addView(b,new LinearLayout.LayoutParams(0,dp(50),1));
+            b.setOnClickListener(v->{task=k;show();});
+        }
 
-        addTab(tabs, "收果", "fruit");
-        addTab(tabs, "收盆", "pot");
-        addTab(tabs, "餵食", "feed");
+        fields=new LinearLayout(this);
+        fields.setOrientation(1);
+        body.addView(fields);
 
-        addSpace(content, 12);
+        if(task.equals("feed")){
+            num("餵食輪數","rounds",5);
+            num("餵食秒數","seconds",10);
+            num("收花瓣後等待秒數","wait",3);
+            check("花瓣快滿停止全部餵食",true);
+            label("完成輪數後連點哨子換批");
+        }else{
+            check("自動選擇顏色",true);
+            for(String c:new String[]{
+                "紅","黃","藍","紫","白","岩石","羽翅","冰"})
+                check(c,false);
+            label("皮克敏數量");
+            Spinner spinner=new Spinner(this);
+            spinner.setAdapter(new ArrayAdapter<String>(
+                this,android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"自動","最大值","自訂"}));
+            fields.addView(spinner);
+            num("自訂數量",task+"amount",10);
+            num("收取目標",task+"target",20);
+        }
 
-        settingsArea = new LinearLayout(this);
-        settingsArea.setOrientation(LinearLayout.VERTICAL);
-        settingsArea.setPadding(dp(12), dp(12),
-            dp(12), dp(12));
-        settingsArea.setBackground(bg(PALE, 15));
-        content.addView(settingsArea);
+        TextView start=btn("▶ 開始執行");
+        body.addView(start);
+        start.setOnClickListener(v->Toast.makeText(
+            this,"目前為介面測試版本",0).show());
+    }
 
-        updateSettings();
+    void label(String s){
+        TextView t=new TextView(this);
+        t.setText(s);
+        t.setTextColor(dark);
+        t.setTextSize(16);
+        t.setPadding(0,dp(10),0,dp(5));
+        fields.addView(t);
+    }
 
-        addSpace(content, 12);
-
-        TextView start = action(
-            "▶ 開始執行", DARK, Color.WHITE);
-        content.addView(start);
-
-        start.setOnClickListener(v -> {
-            saveVisibleInputs();
-            running = true;
-            paused = false;
-            Toast.makeText(this,
-                "設定已保存，自動操作尚未實作",
-                Toast.LENGTH_LONG).show();
+    void num(String s,String key,int def){
+        label(s);
+        EditText e=new EditText(this);
+        e.setInputType(2);
+        e.setText(""+prefs.getInt(key,def));
+        fields.addView(e);
+        e.setOnFocusChangeListener((v,f)->{
+            if(!f)try{
+                prefs.edit().putInt(key,Integer.parseInt(
+                    e.getText().toString())).apply();
+            }catch(Exception ignored){}
         });
+    }
 
-        addSpace(content, 10);
+    void check(String s,boolean value){
+        CheckBox c=new CheckBox(this);
+        c.setText(s);
+        c.setChecked(value);
+        fields.addView(c);
+    }
 
-        TextView stop = action(
+    void drag(View v,Runnable tap){
+        final float[] down=new float[2];
+        final int[] pos=new int[2];
+        final boolean[] moved={false};
+        v.setOnTouchListener((view,e)->{
+            if(e.getAction()==0){
+                down[0]=e.getRawX();
+                down[1]=e.getRawY();
+                pos[0]=p.x;pos[1]=p.y;
+                moved[0]=false;
+                return true;
+            }
+            if(e.getAction()==2){
+                float dx=e.getRawX()-down[0];
+                float dy=e.getRawY()-down[1];
+                if(Math.hypot(dx,dy)>dp(8))moved[0]=true;
+                if(moved[0]){
+                    p.x=pos[0]+(int)dx;
+                    p.y=pos[1]+(int)dy;
+                    wm.updateViewLayout(window,p);
+                }
+                return true;
+            }
+            if(e.getAction()==1){
+                if(moved[0])prefs.edit()
+                    .putInt("x",p.x).putInt("y",p.y).apply();
+                else tap.run();
+                return true;
+            }
+            return true;
+        });
+    }
+
+    @Override
+    public void onDestroy(){
+        if(window!=null)wm.removeView(window);
+        super.onDestroy();
+    }
+
+    @Override
+    public IBinder onBind(Intent i){
+        return null;
+    }
+}
