@@ -110,7 +110,55 @@ public class FloatingService extends Service {
         window=root;
         wm.addView(window,p);
     }
+    new android.os.Handler(
+        android.os.Looper.getMainLooper());
 
+int feedCount = 0;
+int feedLimit = 5;
+long feedInterval = 10000;
+
+Runnable feedAction = new Runnable() {
+    @Override
+    public void run() {
+        if (!running) return;
+
+        if (paused) {
+            feedHandler.postDelayed(this, 500);
+            return;
+        }
+
+        PikminAccessibilityService service =
+            PikminAccessibilityService.instance;
+
+        if (service == null) {
+            running = false;
+            msg("無障礙服務已中斷");
+            return;
+        }
+
+        android.util.DisplayMetrics dm =
+            getResources().getDisplayMetrics();
+
+        float w = dm.widthPixels;
+        float h = dm.heightPixels;
+
+        service.drag(
+            w * 0.51f, h * 0.83f,
+            w * 0.51f, h * 0.53f,
+            850
+        );
+
+        feedCount++;
+
+        if (feedCount < feedLimit) {
+            feedHandler.postDelayed(
+                this, feedInterval);
+        } else {
+            running = false;
+            msg("餵食動作已完成");
+        }
+    }
+};
    void start(){
     PikminAccessibilityService service =
         PikminAccessibilityService.instance;
