@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 懸浮視窗權限 -->
+    <uses-permission
+        android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:allowBackup="false"
         android:label="Pikmin 助手 V2"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <!-- App 主畫面 -->
         <activity
-            android:name="com.pikminassistant.v2.MainActivity"
+            android:name=".MainActivity"
             android:exported="true">
 
             <intent-filter>
@@ -17,6 +22,12 @@
             </intent-filter>
 
         </activity>
+
+        <!-- 懸浮控制服務 -->
+        <service
+            android:name=".FloatingService"
+            android:enabled="true"
+            android:exported="false" />
 
     </application>
 
