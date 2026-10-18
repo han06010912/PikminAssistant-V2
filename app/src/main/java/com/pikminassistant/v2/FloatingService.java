@@ -17,170 +17,160 @@ public class FloatingService extends Service {
     LinearLayout root, fields;
     View window;
     SharedPreferences prefs;
-    int dark = 0xff245c45;
-    int mint = 0xffe6f3e8;
-    int mode = 0;
-    String task = "feed";
-    boolean running = false, paused = false;
+    int dark=0xff245c45, mint=0xffe6f3e8;
+    int mode=0;
+    String task="feed";
+    boolean running=false, paused=false;
 
-    int dp(int n) {
-        return (int)(n * getResources()
+    int dp(int n){
+        return (int)(n*getResources()
             .getDisplayMetrics().density);
     }
 
-    GradientDrawable bg(int color) {
-        GradientDrawable d = new GradientDrawable();
+    GradientDrawable bg(int color){
+        GradientDrawable d=new GradientDrawable();
         d.setColor(color);
-        d.setCornerRadius(dp(15));
+        d.setCornerRadius(dp(12));
         return d;
     }
 
-    TextView btn(String s) {
-        TextView t = new TextView(this);
+    TextView btn(String s){
+        TextView t=new TextView(this);
         t.setText(s);
-        t.setTextSize(14);
+        t.setTextSize(12);
         t.setTextColor(-1);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(dp(9),dp(10),dp(9),dp(10));
+        t.setPadding(dp(7),dp(7),dp(7),dp(7));
         t.setBackground(bg(dark));
         return t;
     }
 
-    void message(String s) {
+    void msg(String s){
         Toast.makeText(this,s,Toast.LENGTH_SHORT).show();
     }
 
     @Override
-    public void onCreate() {
+    public void onCreate(){
         super.onCreate();
-        wm = (WindowManager)getSystemService(WINDOW_SERVICE);
-        prefs = getSharedPreferences("floating",0);
+        wm=(WindowManager)getSystemService(WINDOW_SERVICE);
+        prefs=getSharedPreferences("floating",0);
     }
 
     @Override
-    public int onStartCommand(Intent i,int flags,int id) {
-        if (!Settings.canDrawOverlays(this)) {
+    public int onStartCommand(Intent i,int f,int id){
+        if(!Settings.canDrawOverlays(this)){
             stopSelf();
             return START_NOT_STICKY;
         }
-        mode = i != null && i.getBooleanExtra(
-            "expanded",false) ? 1 : 0;
+        mode=i!=null&&i.getBooleanExtra(
+            "expanded",false)?1:0;
         show();
         return START_NOT_STICKY;
     }
 
-    void show() {
+    void show(){
         remove();
-        root = new LinearLayout(this);
+        root=new LinearLayout(this);
         root.setOrientation(1);
         root.setBackground(bg(mint));
 
-        int type = Build.VERSION.SDK_INT >= 26
-            ? 2038 : 2002;
+        int type=Build.VERSION.SDK_INT>=26?2038:2002;
+        p=new WindowManager.LayoutParams(
+            -2,-2,type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT);
+        p.gravity=Gravity.TOP|Gravity.LEFT;
+        p.x=prefs.getInt("x",dp(20));
+        p.y=prefs.getInt("y",dp(160));
 
-        p = new WindowManager.LayoutParams(
-            -2,-2,type,32,PixelFormat.TRANSLUCENT);
-        p.gravity = Gravity.TOP | Gravity.LEFT;
-        p.x = prefs.getInt("x",30);
-        p.y = prefs.getInt("y",200);
-
-        if (mode == 0) {
-            TextView bubble = btn("🌱");
-            bubble.setTextSize(22);
+        if(mode==0){
+            TextView bubble=btn("🌱");
+            bubble.setTextSize(21);
             root.addView(bubble);
             drag(bubble,()->{mode=2;show();});
-            bubble.setOnLongClickListener(v->{
-                confirmClose();
-                return true;
-            });
-        } else if (mode == 1) {
-            LinearLayout bar = new LinearLayout(this);
+        }else if(mode==1){
+            LinearLayout bar=new LinearLayout(this);
             root.addView(bar);
-            String[] names = {"☰","⚙","▶","Ⅱ","✕"};
-            for (int n=0;n<names.length;n++) {
-                final int index=n;
+            String[] names={"☰","⚙","▶","Ⅱ","✕"};
+            for(int n=0;n<names.length;n++){
+                final int k=n;
                 TextView b=btn(names[n]);
                 bar.addView(b);
-                if(index==0) {
-                    drag(b,()->{mode=0;show();});
-                } else {
-                    b.setOnClickListener(v->{
-                        if(index==1){mode=2;show();}
-                        if(index==2)start();
-                        if(index==3)pause();
-                        if(index==4)confirmClose();
-                    });
-                }
+                if(k==0)drag(b,()->{mode=0;show();});
+                else b.setOnClickListener(v->{
+                    if(k==1){mode=2;show();}
+                    if(k==2)start();
+                    if(k==3)pause();
+                    if(k==4)close();
+                });
             }
-        } else {
-            panel();
-        }
+        }else panel();
+
         window=root;
         wm.addView(window,p);
     }
 
-    void start() {
+    void start(){
         running=true;
         paused=false;
-        message("介面已啟動，自動操作尚未連接");
+        msg("自動操作尚未連接，請勿視為已執行");
     }
 
-    void pause() {
+    void pause(){
         if(!running)return;
         paused=!paused;
-        message(paused?"已暫停":"已繼續");
+        msg(paused?"已暫停":"已繼續");
     }
 
-    void confirmClose() {
-        new android.app.AlertDialog.Builder(this)
-            .setTitle("關閉 Pikmin 助手？")
-            .setMessage("將停止服務並移除懸浮視窗")
-            .setNegativeButton("取消",null)
-            .setPositiveButton("關閉",(d,w)->{
-                running=false;
-                paused=false;
-                stopSelf();
-            }).show();
+    void close(){
+        running=false;
+        paused=false;
+        stopSelf();
     }
-        void panel() {
-        p.width=Math.min(dp(305),
-            getResources().getDisplayMetrics().widthPixels-dp(24));
-        p.height=-2;
+    void panel(){
+        int screen=getResources()
+            .getDisplayMetrics().heightPixels;
+        p.width=dp(265);
+        p.height=screen/2;
 
         LinearLayout head=new LinearLayout(this);
         root.addView(head);
+
         TextView title=btn("🌱 Pikmin 助手 V2");
-        head.addView(title,new LinearLayout.LayoutParams(
-            0,dp(44),1));
+        head.addView(title,
+            new LinearLayout.LayoutParams(0,dp(38),1));
         drag(title,()->{});
 
-        TextView small=btn("−");
-        head.addView(small);
-        small.setOnClickListener(v->{mode=0;show();});
+        TextView mini=btn("−");
+        head.addView(mini);
+        mini.setOnClickListener(v->{mode=0;show();});
 
         TextView exit=btn("✕");
         head.addView(exit);
-        exit.setOnClickListener(v->confirmClose());
+        exit.setOnClickListener(v->close());
 
         ScrollView scroll=new ScrollView(this);
-        root.addView(scroll);
+        root.addView(scroll,
+            new LinearLayout.LayoutParams(-1,0,1));
 
         LinearLayout body=new LinearLayout(this);
         body.setOrientation(1);
-        body.setPadding(dp(10),dp(8),dp(10),dp(10));
+        body.setPadding(dp(7),dp(6),dp(7),dp(8));
         scroll.addView(body);
 
         LinearLayout tabs=new LinearLayout(this);
         body.addView(tabs);
+
         String[] names={"收果","收盆","餵食"};
         String[] keys={"fruit","pot","feed"};
 
         for(int n=0;n<3;n++){
-            final String k=keys[n];
+            final String key=keys[n];
             TextView b=btn(names[n]);
-            tabs.addView(b,new LinearLayout.LayoutParams(
-                0,dp(43),1));
-            b.setOnClickListener(v->{task=k;show();});
+            tabs.addView(b,
+                new LinearLayout.LayoutParams(0,dp(36),1));
+            b.setOnClickListener(v->{task=key;show();});
         }
 
         fields=new LinearLayout(this);
@@ -198,12 +188,6 @@ public class FloatingService extends Service {
             for(String c:new String[]{
                 "紅","黃","藍","紫","白","岩石","羽翅","冰"})
                 check(c,false);
-            label("皮克敏數量");
-            Spinner spinner=new Spinner(this);
-            spinner.setAdapter(new ArrayAdapter<String>(
-                this,android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"自動","最大值","自訂"}));
-            fields.addView(spinner);
             num("自訂數量",task+"amount",10);
             num("收取目標",task+"target",20);
         }
@@ -221,39 +205,32 @@ public class FloatingService extends Service {
         stop.setOnClickListener(v->{
             running=false;
             paused=false;
-            message("已停止");
+            msg("已停止");
         });
     }
 
     void label(String s){
         TextView t=new TextView(this);
         t.setText(s);
+        t.setTextSize(12);
         t.setTextColor(dark);
-        t.setTextSize(13);
-        t.setPadding(0,dp(7),0,dp(2));
         fields.addView(t);
     }
 
     void num(String s,String key,int def){
         label(s);
         EditText e=new EditText(this);
-        e.setTextSize(15);
+        e.setTextSize(13);
         e.setSingleLine(true);
         e.setInputType(2);
         e.setText(""+prefs.getInt(key,def));
         fields.addView(e);
-        e.setOnFocusChangeListener((v,f)->{
-            if(!f)try{
-                prefs.edit().putInt(key,Integer.parseInt(
-                    e.getText().toString())).apply();
-            }catch(Exception ignored){}
-        });
     }
 
     void check(String s,boolean value){
         CheckBox c=new CheckBox(this);
         c.setText(s);
-        c.setTextSize(13);
+        c.setTextSize(12);
         c.setChecked(value);
         fields.addView(c);
     }
@@ -262,6 +239,7 @@ public class FloatingService extends Service {
         final float[] down=new float[2];
         final int[] pos=new int[2];
         final boolean[] moved={false};
+
         v.setOnTouchListener((view,e)->{
             if(e.getAction()==0){
                 down[0]=e.getRawX();
@@ -305,8 +283,6 @@ public class FloatingService extends Service {
 
     @Override
     public void onDestroy(){
-        running=false;
-        paused=false;
         remove();
         super.onDestroy();
     }
